@@ -21,3 +21,5 @@ $RECYCLE.BIN/
 # =========================
 # Operating System Files
 # =========================
+*.xml
+.idea/TH10_Collision_Points_Rewrite.iml
