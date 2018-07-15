@@ -1,6 +1,7 @@
 import os
 os.environ["PYSDL2_DLL_PATH"] = ".\\"
 from sdl2 import *
+from sdl2.sdlttf import *
 from win32gui import *
 from win32process import *
 from win32api import *
@@ -204,20 +205,28 @@ def get_laser_data():
         return laser_list
     esi, ebx=ctypes.c_int(), ctypes.c_int()
     DLL.ReadProcessMemory(int(PROCESS), base.value + 0x18, ctypes.byref(esi), 4, None)
-    while True:
-        DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x8, ctypes.byref(ebx), 4, None)
-        x, y, w, h, arc = ctypes.c_float(), ctypes.c_float(), ctypes.c_float(), ctypes.c_float(), ctypes.c_float()
-        DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x24, ctypes.byref(x), 4, None)
-        DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x28, ctypes.byref(y), 4, None)
-        DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x3c, ctypes.byref(arc), 4, None)
-        DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x40, ctypes.byref(h), 4, None)
-        DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x44, ctypes.byref(w), 4, None)
-        laser=Laser(x.value, y.value, w.value/2.0, h.value, arc.value)
-        laser_list.append(laser)
-        if ebx.value==0:
-            break
-        esi.value=ebx.value
+    if esi.value!=0:
+        while True:
+            DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x8, ctypes.byref(ebx), 4, None)
+            x, y, w, h, arc = ctypes.c_float(), ctypes.c_float(), ctypes.c_float(), ctypes.c_float(), ctypes.c_float()
+            DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x24, ctypes.byref(x), 4, None)
+            DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x28, ctypes.byref(y), 4, None)
+            DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x3c, ctypes.byref(arc), 4, None)
+            DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x40, ctypes.byref(h), 4, None)
+            DLL.ReadProcessMemory(int(PROCESS), esi.value + 0x44, ctypes.byref(w), 4, None)
+            laser = Laser(x.value, y.value, w.value / 2.0, h.value, arc.value)
+            laser_list.append(laser)
+            if ebx.value == 0:
+                break
+            esi.value = ebx.value
     return laser_list
+
+def get_key_data():
+    global PROCESS
+    base = ctypes.c_int()
+    DLL.ReadProcessMemory(int(PROCESS), 0x00474e5c, ctypes.byref(base), 1, None)
+    # [right, left, down, up, ?, shift, x, z]
+    return [int(c) for c in str(bin(base.value))[2:].rjust(8, "0")]
 
 def PointRotate(cx, cy, x, y, arc):
 	_x = cx + (x - cx) * cos(arc) - (y - cy) * sin(arc)
@@ -239,21 +248,63 @@ if __name__=="__main__":
         if PROCESS==0:
             print("打开进程失败")
         else:
+            SDL_Init(SDL_INIT_EVERYTHING)
+            TTF_Init()
             window = SDL_CreateWindow(b"TH10_CP",
                                       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                                      400, 480, SDL_WINDOW_SHOWN)
+                                      600, 480, SDL_WINDOW_SHOWN)
             renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED)
             running = True
             event = SDL_Event()
+            upimage = SDL_LoadBMP(b".\\key_up.bmp")
+            uptexture = SDL_CreateTextureFromSurface(renderer, upimage)
+            downimage = SDL_LoadBMP(b".\\key_down.bmp")
+            downtexture = SDL_CreateTextureFromSurface(renderer, downimage)
+            font = TTF_OpenFont(b".\\simhei.ttf", 20)
+            color = SDL_Color(0, 0, 0, 0)
+            itemsurf=None
+            itemtexture=None
+            enemysurf=None
+            enemytexture=None
+            bulletsurf=None
+            bullettexture=None
+            lasersurf=None
+            lasertexture=None
             while True:
                 if not find_TH10():
                     print("风神录关闭，显示器将随之关闭")
+                    SDL_DestroyTexture(uptexture)
+                    SDL_DestroyTexture(downtexture)
+                    SDL_DestroyTexture(itemtexture)
+                    SDL_DestroyTexture(enemytexture)
+                    SDL_DestroyTexture(bullettexture)
+                    SDL_DestroyTexture(lasertexture)
+                    SDL_FreeSurface(upimage)
+                    SDL_FreeSurface(downimage)
+                    SDL_FreeSurface(itemsurf)
+                    SDL_FreeSurface(enemysurf)
+                    SDL_FreeSurface(bulletsurf)
+                    SDL_FreeSurface(lasersurf)
+                    TTF_CloseFont(font)
                     SDL_DestroyRenderer(renderer)
                     SDL_DestroyWindow(window)
                     SDL_Quit()
                     break
                 if not running:
                     print("显示器关闭")
+                    SDL_DestroyTexture(uptexture)
+                    SDL_DestroyTexture(downtexture)
+                    SDL_DestroyTexture(itemtexture)
+                    SDL_DestroyTexture(enemytexture)
+                    SDL_DestroyTexture(bullettexture)
+                    SDL_DestroyTexture(lasertexture)
+                    SDL_FreeSurface(upimage)
+                    SDL_FreeSurface(downimage)
+                    SDL_FreeSurface(itemsurf)
+                    SDL_FreeSurface(enemysurf)
+                    SDL_FreeSurface(bulletsurf)
+                    SDL_FreeSurface(lasersurf)
+                    TTF_CloseFont(font)
                     SDL_DestroyRenderer(renderer)
                     SDL_DestroyWindow(window)
                     SDL_Quit()
@@ -264,18 +315,42 @@ if __name__=="__main__":
                         break
                 SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0)
                 SDL_RenderClear(renderer)
+                keys=get_key_data()
+                SDL_RenderCopy(renderer, uptexture if keys[1] == 0 else downtexture, None, SDL_Rect(420, 410, 50, 50))
+                SDL_RenderCopy(renderer, uptexture if keys[2] == 0 else downtexture, None, SDL_Rect(475, 410, 50, 50))
+                SDL_RenderCopy(renderer, uptexture if keys[0] == 0 else downtexture, None, SDL_Rect(530, 410, 50, 50))
+                SDL_RenderCopy(renderer, uptexture if keys[3] == 0 else downtexture, None, SDL_Rect(475, 355, 50, 50))
+                SDL_RenderCopy(renderer, uptexture if keys[5] == 0 else downtexture, None, SDL_Rect(420, 290, 50, 50))
+                SDL_RenderCopy(renderer, uptexture if keys[7] == 0 else downtexture, None, SDL_Rect(475, 290, 50, 50))
+                SDL_RenderCopy(renderer, uptexture if keys[6] == 0 else downtexture, None, SDL_Rect(530, 290, 50, 50))
                 SDL_SetRenderDrawColor(renderer, 0, 255, 0, 0)
-                for item in get_item_data():
+                items=get_item_data()
+                itemsurf = TTF_RenderUTF8_Blended(font, ("物件数： "+str(len(items))).encode(), color)
+                itemtexture=SDL_CreateTextureFromSurface(renderer, itemsurf)
+                SDL_RenderCopy(renderer, itemtexture, None, SDL_Rect(420, 20, itemsurf.contents.w, itemsurf.contents.h))
+                for item in items:
                     rect = SDL_Rect(int(item.get_x().value) +197, int(item.get_y().value) - 3, 6, 6)
                     SDL_RenderDrawRect(renderer, rect)
                 SDL_SetRenderDrawColor(renderer, 255, 0, 0, 0)
-                for enemy in get_enemy_data():
+                enemys=get_enemy_data()
+                enemysurf = TTF_RenderUTF8_Blended(font, ("敌人数： "+str(len(enemys))).encode(), color)
+                enemytexture=SDL_CreateTextureFromSurface(renderer, enemysurf)
+                SDL_RenderCopy(renderer, enemytexture, None, SDL_Rect(420, 60, enemysurf.contents.w, enemysurf.contents.h))
+                for enemy in enemys:
                     rect = SDL_Rect(int(enemy.get_x() - 0.5 * enemy.get_w() + 200), int(enemy.get_y() - 0.5 * enemy.get_h()), int(enemy.get_w()), int(enemy.get_h()))
                     SDL_RenderDrawRect(renderer, rect)
-                for bullet in get_bullet_data():
+                bullets=get_bullet_data()
+                bulletsurf = TTF_RenderUTF8_Blended(font, ("子弹数： "+str(len(bullets))).encode(), color)
+                bullettexture=SDL_CreateTextureFromSurface(renderer, bulletsurf)
+                SDL_RenderCopy(renderer, bullettexture, None, SDL_Rect(420, 100, bulletsurf.contents.w, bulletsurf.contents.h))
+                for bullet in bullets:
                     rect = SDL_Rect(int(bullet.get_x() - 0.5 * bullet.get_w() + 200), int(bullet.get_y() - 0.5 * bullet.get_h()), int(bullet.get_w()), int(bullet.get_h()))
                     SDL_RenderDrawRect(renderer, rect)
-                for laser in get_laser_data():
+                lasers=get_laser_data()
+                lasersurf = TTF_RenderUTF8_Blended(font, ("激光数： "+str(len(lasers))).encode(), color)
+                lasertexture=SDL_CreateTextureFromSurface(renderer, lasersurf)
+                SDL_RenderCopy(renderer, lasertexture, None, SDL_Rect(420, 140, lasersurf.contents.w, lasersurf.contents.h))
+                for laser in lasers:
                     x1 = 200 + laser.get_x() - 0.5 * laser.get_w()
                     y1 = laser.get_y()
                     x2 = x1 + laser.get_w()
