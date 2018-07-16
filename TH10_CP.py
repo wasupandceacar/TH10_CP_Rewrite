@@ -9,6 +9,8 @@ from win32con import *
 import ctypes
 from math import *
 
+from TH10_CP_Rewrite.DodgingArea import *
+
 HANDLE=0
 
 PROCESS=0
@@ -152,17 +154,15 @@ def get_enemy_data():
 
 def get_player_data():
     global PROCESS
-    player_list=[]
     x, y = ctypes.c_float(), ctypes.c_float()
     obj_base = ctypes.c_int()
     DLL.ReadProcessMemory(int(PROCESS), 0x00477834, ctypes.byref(obj_base), 4, None)
     if obj_base.value==0:
-        return player_list
+        return None
     DLL.ReadProcessMemory(int(PROCESS), obj_base.value + 0x3c0, ctypes.byref(x), 4, None)
     DLL.ReadProcessMemory(int(PROCESS), obj_base.value + 0x3c4, ctypes.byref(y), 4, None)
     player = Item(x, y)
-    player_list.append(player)
-    return player_list
+    return player
 
 def get_bullet_data():
     global PROCESS
@@ -254,6 +254,7 @@ if __name__=="__main__":
                                       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                       600, 480, SDL_WINDOW_SHOWN)
             renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED)
+            texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, 600, 480)
             running = True
             event = SDL_Event()
             upimage = SDL_LoadBMP(b".\\key_up.bmp")
@@ -270,6 +271,8 @@ if __name__=="__main__":
             bullettexture=None
             lasersurf=None
             lasertexture=None
+            player=None
+            dodgingarea = init_area()
             while True:
                 if not find_TH10():
                     print("风神录关闭，显示器将随之关闭")
@@ -323,6 +326,16 @@ if __name__=="__main__":
                 SDL_RenderCopy(renderer, uptexture if keys[5] == 0 else downtexture, None, SDL_Rect(420, 290, 50, 50))
                 SDL_RenderCopy(renderer, uptexture if keys[7] == 0 else downtexture, None, SDL_Rect(475, 290, 50, 50))
                 SDL_RenderCopy(renderer, uptexture if keys[6] == 0 else downtexture, None, SDL_Rect(530, 290, 50, 50))
+                SDL_SetRenderDrawColor(renderer, 0, 0, 255, 0)
+                player = get_player_data()
+                if player!=None:
+                    rect = SDL_Rect(int(player.get_x().value) + 199, int(player.get_y().value) - 1, 2, 2)
+                    leftup_point=(int(player.get_x().value) + 199 - DELTA, int(player.get_y().value) - 1 - DELTA)
+                    SDL_RenderDrawRect(renderer, rect)
+                    SDL_SetRenderDrawColor(renderer, 0, 255, 255, 0)
+                    rect = SDL_Rect(int(player.get_x().value) + 199 - DELTA, int(player.get_y().value) - 1 -DELTA, SCALE, SCALE)
+                    SDL_RenderDrawRect(renderer, rect)
+                    dodgingarea = init_area()
                 SDL_SetRenderDrawColor(renderer, 0, 255, 0, 0)
                 items=get_item_data()
                 itemsurf = TTF_RenderUTF8_Blended(font, ("物件数： "+str(len(items))).encode(), color)
@@ -337,15 +350,21 @@ if __name__=="__main__":
                 enemytexture=SDL_CreateTextureFromSurface(renderer, enemysurf)
                 SDL_RenderCopy(renderer, enemytexture, None, SDL_Rect(420, 60, enemysurf.contents.w, enemysurf.contents.h))
                 for enemy in enemys:
-                    rect = SDL_Rect(int(enemy.get_x() - 0.5 * enemy.get_w() + 200), int(enemy.get_y() - 0.5 * enemy.get_h()), int(enemy.get_w()), int(enemy.get_h()))
+                    x, y, w, h = int(enemy.get_x() - 0.5 * enemy.get_w() + 200), int(enemy.get_y() - 0.5 * enemy.get_h()), int(enemy.get_w()), int(enemy.get_h())
+                    rect = SDL_Rect(x, y, w, h)
                     SDL_RenderDrawRect(renderer, rect)
+                    if player!=None:
+                        wash_area(dodgingarea, leftup_point, x, x+w, y, y+h)
                 bullets=get_bullet_data()
                 bulletsurf = TTF_RenderUTF8_Blended(font, ("子弹数： "+str(len(bullets))).encode(), color)
                 bullettexture=SDL_CreateTextureFromSurface(renderer, bulletsurf)
                 SDL_RenderCopy(renderer, bullettexture, None, SDL_Rect(420, 100, bulletsurf.contents.w, bulletsurf.contents.h))
                 for bullet in bullets:
-                    rect = SDL_Rect(int(bullet.get_x() - 0.5 * bullet.get_w() + 200), int(bullet.get_y() - 0.5 * bullet.get_h()), int(bullet.get_w()), int(bullet.get_h()))
+                    x, y, w, h = int(bullet.get_x() - 0.5 * bullet.get_w() + 200), int(bullet.get_y() - 0.5 * bullet.get_h()), int(bullet.get_w()), int(bullet.get_h())
+                    rect = SDL_Rect(x, y, w, h)
                     SDL_RenderDrawRect(renderer, rect)
+                    if player!=None:
+                        wash_area(dodgingarea, leftup_point, x, x+w, y, y+h)
                 lasers=get_laser_data()
                 lasersurf = TTF_RenderUTF8_Blended(font, ("激光数： "+str(len(lasers))).encode(), color)
                 lasertexture=SDL_CreateTextureFromSurface(renderer, lasersurf)
@@ -370,9 +389,7 @@ if __name__=="__main__":
                     SDL_RenderDrawLine(renderer, int(x2), int(y2), int(x4), int(y4))
                     SDL_RenderDrawLine(renderer, int(x3), int(y3), int(x4), int(y4))
                     SDL_RenderDrawLine(renderer, int(x1), int(y1), int(x3), int(y3))
-                SDL_SetRenderDrawColor(renderer, 0, 0, 255, 0)
-                for player in get_player_data():
-                    rect = SDL_Rect(int(player.get_x().value) +198, int(player.get_y().value) - 2, 4, 4)
-                    SDL_RenderDrawRect(renderer, rect)
+                    if player!=None:
+                        wash_area_laser(dodgingarea, leftup_point, (int(x1), int(y1)), (int(x2), int(y2)), (int(x4), int(y4)), (int(x3), int(y3)))
                 SDL_RenderPresent(renderer)
                 SDL_Delay(16)

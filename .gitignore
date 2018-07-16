@@ -23,3 +23,4 @@ $RECYCLE.BIN/
 # =========================
 *.xml
 .idea/TH10_Collision_Points_Rewrite.iml
+__pycache__/DodgingArea.cpython-35.pyc
